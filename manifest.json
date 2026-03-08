@@ -1,0 +1,27 @@
+{
+    "schema_version": "1.0",
+    "repo_id": "se-zoo-adv-particle-filter",
+    "group": "advanced-topics",
+    "category": "particle-filter",
+    "label": "Particle Methods",
+    "color_accent": "#bc4c00",
+    "items": [
+        {
+            "id": "particle-filter",
+            "module_id": "E09",
+            "name": "Particle Filter",
+            "short_description": "When noise is non-Gaussian or the system has discontinuities, particle filters represent the full posterior distribution.",
+            "group": "advanced-topics",
+            "category": "particle-filter",
+            "tags": ["particle", "Monte-Carlo", "non-Gaussian", "resampling", "bimodal", "Coulomb"],
+            "year_introduced": 1993,
+            "key_paper": "Gordon et al. (1993)",
+            "complexity": "advanced",
+            "color_accent": "#bc4c00",
+            "robot": "Pendulum + Friction",
+            "core_concept": "Sequential Monte Carlo estimation",
+            "use_cases": ["Non-Gaussian estimation", "Multimodal tracking", "Discontinuous dynamics"],
+            "related_items": ["observability", "ekf"]
+        }
+    ]
+}

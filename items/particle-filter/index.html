@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E09: Particle Filter — SE Zoo</title>
+    <meta name="description" content="Bootstrap particle filter for a pendulum with Coulomb friction. Interactive non-Gaussian state estimation with bimodal posteriors.">
+    <style>
+        :root{--bg-primary:#0d1117;--bg-secondary:#161b22;--bg-card:#1c2128;--bg-card-hover:#272d36;--bg-input:#21262d;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#6e7681;--text-link:#58a6ff;--border-default:#30363d;--border-muted:#21262d;--radius-sm:6px;--radius-md:10px;--transition:.2s ease;--accent:#bc4c00}
+        :root[data-theme="light"]{--bg-primary:#ffffff;--bg-secondary:#f6f8fa;--bg-card:#ffffff;--bg-card-hover:#f3f4f6;--bg-input:#f6f8fa;--text-primary:#1f2328;--text-secondary:#656d76;--text-muted:#8b949e;--text-link:#0969da;--border-default:#d0d7de;--border-muted:#d8dee4}
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--text-primary);background:var(--bg-primary);-webkit-font-smoothing:antialiased;line-height:1.6}
+    </style>
+    <link rel="stylesheet" href="../../css/item.css">
+    <link rel="stylesheet" href="../../css/animation.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="item-page">
+        <nav class="item-nav">
+            <a href="https://malphons.github.io/app_se_zoo/" class="item-nav__back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to SE Zoo</a>
+            <button class="item-nav__theme-toggle" aria-label="Toggle theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
+        </nav>
+
+        <section class="item-hero">
+            <h1 class="item-hero__title">Particle Filter</h1>
+            <div class="item-hero__meta">
+                <span class="item-hero__module-id">E09</span>
+                <span class="item-hero__badge" style="background:#f85149;color:#fff">Advanced Topics</span>
+                <span class="item-hero__badge" style="background:rgba(188,76,0,.15);color:#bc4c00">Particle Methods</span>
+                <span class="item-hero__badge" style="background:var(--bg-card);color:var(--text-secondary);border:1px solid var(--border-default)">Pendulum + Friction</span>
+                <span class="item-hero__year">Est. 1993</span>
+            </div>
+            <p class="item-hero__desc">
+                When noise is non-Gaussian or the system has discontinuities, particle filters
+                represent the full posterior distribution using a weighted set of samples.
+            </p>
+        </section>
+
+        <div class="item-prereqs">
+            <span class="item-prereqs__label">Prerequisite:</span>
+            <a href="https://malphons.github.io/se-zoo-adv-observability/items/observability/" class="item-related__link" style="padding:3px 10px;font-size:.75rem">E07: Observability</a>
+        </div>
+
+        <div class="item-viz">
+            <div class="item-viz__split">
+                <div class="item-robot" id="robot-container">
+                    <span class="item-robot__label">Robot View</span>
+                </div>
+                <div class="item-diagram">
+                    <div class="item-diagram__controls">
+                        <button class="item-diagram__btn item-diagram__btn--active" id="btn-particles">Particles</button>
+                        <button class="item-diagram__btn" id="btn-traces">State Traces</button>
+                        <button class="item-diagram__btn" id="btn-neff">N_eff</button>
+                        <button class="item-diagram__btn" id="btn-regenerate">Regenerate</button>
+                    </div>
+                    <div id="diagram-container"></div>
+                </div>
+            </div>
+            <div class="item-transport">
+                <button class="item-transport__btn" id="btn-step-back" aria-label="Step back">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="3" height="16"/><polygon points="20,4 8,12 20,20"/></svg>
+                </button>
+                <button class="item-transport__btn item-transport__btn--play" id="btn-play" aria-label="Play">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+                </button>
+                <button class="item-transport__btn" id="btn-step-fwd" aria-label="Step forward">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,4 16,12 4,20"/><rect x="17" y="4" width="3" height="16"/></svg>
+                </button>
+                <input type="range" class="item-transport__scrubber" id="scrubber" min="0" max="250" value="0">
+                <span class="item-transport__frame" id="frame-display">0 / 250</span>
+                <select class="item-transport__speed" id="speed-select">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="2">2x</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="item-sliders">
+            <div class="item-slider" id="slider-Np">
+                <span class="item-slider__label">N particles:</span>
+                <input type="range" class="item-slider__input" min="50" max="500" step="10" value="200">
+                <span class="item-slider__value">200</span>
+            </div>
+            <div class="item-slider" id="slider-Q">
+                <span class="item-slider__label">Process Q:</span>
+                <input type="range" class="item-slider__input" min="0.001" max="0.1" step="0.001" value="0.01">
+                <span class="item-slider__value">0.010</span>
+            </div>
+            <div class="item-slider" id="slider-R">
+                <span class="item-slider__label">Meas. R:</span>
+                <input type="range" class="item-slider__input" min="0.01" max="0.5" step="0.01" value="0.1">
+                <span class="item-slider__value">0.10</span>
+            </div>
+            <div class="item-slider" id="slider-mu">
+                <span class="item-slider__label">Friction &mu;:</span>
+                <input type="range" class="item-slider__input" min="0.0" max="2.0" step="0.05" value="0.8">
+                <span class="item-slider__value">0.80</span>
+            </div>
+        </div>
+        <div class="item-stats" id="diagram-stats"></div>
+
+        <div class="item-tabs">
+            <button class="item-tab-btn item-tab-btn--active" data-tab="overview">Overview</button>
+            <button class="item-tab-btn" data-tab="howto">How It Works</button>
+            <button class="item-tab-btn" data-tab="math">Math</button>
+            <button class="item-tab-btn" data-tab="code">Code</button>
+            <button class="item-tab-btn" data-tab="references">References</button>
+        </div>
+
+        
+        <div class="item-tab-content item-tab-content--active" id="tab-overview">
+            <div class="item-section">
+                <h2>Overview</h2>
+                <p>The Kalman filter and EKF assume Gaussian noise and (approximately) linear dynamics. Many real systems violate these assumptions: Coulomb friction creates a discontinuity at $\dot\theta=0$, contact forces produce impulsive non-Gaussian disturbances, and uncertain initial conditions can make the posterior distribution <strong>bimodal</strong>.</p>
+                <p>The <strong>particle filter</strong> (also called Sequential Monte Carlo) represents the posterior $p(\mathbf{x}_k|\mathbf{y}_{1:k})$ as a weighted set of $N$ samples (particles). It makes no assumptions about the shape of the distribution and can track multimodal, skewed, or heavy-tailed posteriors.</p>
+                <div class="item-insight">
+                    <div class="item-insight__label">Key Insight</div>
+                    <p style="color:var(--text-secondary);margin:0">The particle filter is the <strong>only standard estimator</strong> that can faithfully represent a bimodal posterior. When a pendulum might be swinging left or right, particles naturally split into two clusters &mdash; something no Gaussian filter can do.</p>
+                </div>
+                <h3>When to Use Particle Filters</h3>
+                <ul>
+                    <li><strong>Non-Gaussian noise</strong> &mdash; Uniform, Cauchy, mixture distributions</li>
+                    <li><strong>Multimodal posteriors</strong> &mdash; Uncertain initial direction, ambiguous measurements</li>
+                    <li><strong>Discontinuous dynamics</strong> &mdash; Coulomb friction, contact, switching modes</li>
+                    <li><strong>Highly nonlinear systems</strong> &mdash; Where EKF linearization fails</li>
+                </ul>
+                <h3>Key Properties</h3>
+                <ul>
+                    <li><strong>Asymptotically exact</strong> &mdash; Converges to true posterior as $N\to\infty$</li>
+                    <li><strong>No linearity assumption</strong> &mdash; Works with arbitrary nonlinear models</li>
+                    <li><strong>Computationally expensive</strong> &mdash; Cost scales linearly with $N$</li>
+                    <li><strong>Weight degeneracy</strong> &mdash; Requires resampling to prevent collapse</li>
+                </ul>
+            </div>
+        </div>
+
+        
+        <div class="item-tab-content" id="tab-howto">
+            <div class="item-section">
+                <h2>How It Works</h2>
+                <p>The Bootstrap Particle Filter (SIR &mdash; Sampling Importance Resampling) operates in three steps each time a measurement arrives:</p>
+                <ol style="color:var(--text-secondary);padding-left:20px;margin-bottom:16px">
+                    <li style="margin-bottom:12px"><strong>Predict (Propagate):</strong> Draw each particle forward through the nonlinear dynamics model, including process noise:
+                        $$\mathbf{x}_k^{(i)} \sim p(\mathbf{x}_k | \mathbf{x}_{k-1}^{(i)})$$
+                        For our pendulum this means integrating $\ddot\theta = -(g/L)\sin\theta - \mu\,\mathrm{sign}(\dot\theta) - d\dot\theta + w$ for each particle.</li>
+                    <li style="margin-bottom:12px"><strong>Update (Weight):</strong> Evaluate the measurement likelihood for each particle and update its weight:
+                        $$w_k^{(i)} \propto w_{k-1}^{(i)} \cdot p(\mathbf{y}_k | \mathbf{x}_k^{(i)})$$
+                        Particles close to the measurement get high weight; those far away get low weight.</li>
+                    <li style="margin-bottom:12px"><strong>Resample:</strong> When the effective sample size $N_\mathrm{eff}$ drops below $N/2$, resample: duplicate high-weight particles and discard low-weight ones using <em>systematic resampling</em> (low-variance). Reset all weights to $1/N$.</li>
+                </ol>
+                <div class="item-insight">
+                    <div class="item-insight__label">Resampling Trade-off</div>
+                    <p style="color:var(--text-secondary);margin:0">Resampling combats weight degeneracy but introduces <strong>sample impoverishment</strong> &mdash; diversity is lost as particles are duplicated. The $N_\mathrm{eff}$ threshold balances these two effects. Watch the $N_\mathrm{eff}$ plot to see when resampling events occur.</p>
+                </div>
+            </div>
+        </div>
+
+        
+        <div class="item-tab-content" id="tab-math">
+            <div class="item-section">
+                <h2>Key Equations</h2>
+                <div class="item-math">
+                    <div class="item-math__label">Bayesian Recursion</div>
+                    <p>$$p(\mathbf{x}_k | \mathbf{y}_{1:k}) \propto p(\mathbf{y}_k | \mathbf{x}_k) \int p(\mathbf{x}_k | \mathbf{x}_{k-1})\, p(\mathbf{x}_{k-1} | \mathbf{y}_{1:k-1})\, d\mathbf{x}_{k-1}$$</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Particle Approximation of the Posterior</div>
+                    <p>$$p(\mathbf{x}_k | \mathbf{y}_{1:k}) \approx \sum_{i=1}^{N} w_k^{(i)}\, \delta(\mathbf{x}_k - \mathbf{x}_k^{(i)}), \qquad \sum_{i=1}^{N} w_k^{(i)} = 1$$</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Importance Weight Update</div>
+                    <p>$$\tilde{w}_k^{(i)} = w_{k-1}^{(i)} \cdot p(\mathbf{y}_k | \mathbf{x}_k^{(i)}), \qquad w_k^{(i)} = \frac{\tilde{w}_k^{(i)}}{\sum_{j=1}^{N}\tilde{w}_k^{(j)}}$$</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Gaussian Measurement Likelihood</div>
+                    <p>$$p(y_k | \mathbf{x}_k^{(i)}) = \frac{1}{\sqrt{2\pi R}} \exp\!\left(-\frac{(y_k - h(\mathbf{x}_k^{(i)}))^2}{2R}\right)$$</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Effective Sample Size</div>
+                    <p>$$N_\mathrm{eff} = \frac{1}{\sum_{i=1}^{N} (w_k^{(i)})^2}$$</p>
+                    <p style="color:var(--text-muted);font-size:.85rem">When $N_\mathrm{eff} \ll N$, most weight is concentrated on a few particles and resampling is needed. The range is $1 \le N_\mathrm{eff} \le N$.</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Systematic Resampling</div>
+                    <p style="color:var(--text-secondary)">Generate one uniform draw $u_0 \sim \mathcal{U}[0, 1/N)$ and set $u_i = u_0 + i/N$. Walk through the cumulative weight distribution to select indices. This gives $O(N)$ resampling with lower variance than multinomial resampling.</p>
+                </div>
+                <div class="item-math">
+                    <div class="item-math__label">Pendulum + Coulomb Friction Dynamics</div>
+                    <p>$$\ddot\theta = -\frac{g}{L}\sin\theta - \mu\,\mathrm{sign}(\dot\theta) - d\,\dot\theta + w, \qquad w \sim \mathcal{N}(0, Q)$$</p>
+                    <p style="color:var(--text-muted);font-size:.85rem">The $\mathrm{sign}(\dot\theta)$ term is discontinuous at $\dot\theta=0$, making the process noise distribution non-Gaussian through the dynamics.</p>
+                </div>
+            </div>
+        </div>
+
+        
+        <div class="item-tab-content" id="tab-code">
+            <div class="item-section">
+                <h2>MATLAB Implementation</h2>
+                <div class="item-code">
+                    <div class="item-code__label">MATLAB</div>
+                    <pre><code>%% E09: Bootstrap Particle Filter (Pendulum + Coulomb Friction)
+function xnext = pendulumDynamics(x, dt, mu)
+    g = 9.81; L = 1.0; d = 0.05;
+    theta = x(1); thetaDot = x(2);
+    thetaDDot = -(g/L)*sin(theta) ...
+                - mu*sign(thetaDot) - d*thetaDot;
+    xnext = x + dt*[thetaDot; thetaDDot];
+end
+
+%% Systematic resampling
+function idx = systematicResample(w, N)
+    csw = cumsum(w);
+    csw = csw / csw(end);       % normalise
+    u0 = rand/N;
+    u = u0 + (0:N-1)'/N;
+    idx = zeros(N,1);
+    j = 1;
+    for i = 1:N
+        while csw(j) < u(i), j = j+1; end
+        idx(i) = j;
+    end
+end
+
+%% Main PF loop
+N_particles = 200; dt = 0.02; T = 5;
+mu = 0.8; Q = 0.01; R = 0.1;
+Nsteps = round(T/dt);
+
+% True state
+x_true = [0.8; 2.0];
+
+% Bimodal prior: half particles +vel, half -vel
+particles = zeros(2, N_particles);
+for i = 1:N_particles
+    dir = 2*(i <= N_particles/2) - 1;
+    particles(:,i) = [0.8+0.3*randn; dir*2+0.5*randn];
+end
+w = ones(1,N_particles) / N_particles;
+
+for k = 1:Nsteps
+    % Measurement
+    y = x_true(1) + sqrt(R)*randn;
+
+    % Predict: propagate particles
+    for i = 1:N_particles
+        particles(:,i) = pendulumDynamics(particles(:,i), dt, mu);
+        particles(:,i) = particles(:,i) + ...
+            sqrt(Q)*[0.1*randn; randn]*dt;
+    end
+
+    % Update: weight by likelihood
+    for i = 1:N_particles
+        w(i) = w(i) * normpdf(y, particles(1,i), sqrt(R));
+    end
+    w = w / sum(w);
+
+    % Effective sample size
+    N_eff = 1 / sum(w.^2);
+
+    % Resample if N_eff < N/2
+    if N_eff < N_particles/2
+        idx = systematicResample(w, N_particles);
+        particles = particles(:, idx);
+        w = ones(1,N_particles) / N_particles;
+    end
+
+    % Weighted mean estimate
+    x_est = particles * w';
+
+    % Propagate true state
+    x_true = pendulumDynamics(x_true, dt, mu);
+    x_true = x_true + sqrt(Q)*[0.1*randn; randn]*dt;
+end</code></pre>
+                </div>
+            </div>
+        </div>
+
+        
+        <div class="item-tab-content" id="tab-references">
+            <div class="item-section">
+                <h2>Key References</h2>
+                <ul>
+                    <li>Gordon, N.J., Salmond, D.J., & Smith, A.F.M. (1993). Novel approach to nonlinear/non-Gaussian Bayesian state estimation. <em>IEE Proceedings F</em>, 140(2), 107&ndash;113.</li>
+                    <li>Arulampalam, M.S., Maskell, S., Gordon, N., & Clapp, T. (2002). A tutorial on particle filters for online nonlinear/non-Gaussian Bayesian tracking. <em>IEEE Trans. Signal Processing</em>, 50(2), 174&ndash;188.</li>
+                    <li>Doucet, A., de Freitas, N., & Gordon, N. (2001). <em>Sequential Monte Carlo Methods in Practice</em>. Springer.</li>
+                </ul>
+                <h3>Related Modules</h3>
+                <div class="item-related">
+                    <a href="https://malphons.github.io/se-zoo-adv-observability/items/observability/" class="item-related__link">&larr; E07: Observability</a>
+                    <a href="https://malphons.github.io/se-zoo-opt-nonlinear-filter/items/ekf/" class="item-related__link">&larr; E05: Extended Kalman Filter</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="../../js/shared-diagram.js"></script>
+    <script src="../../js/shared-animation.js"></script>
+    <script src="../../js/shared-tabs.js"></script>
+    <script>
+    (function () {
+        'use strict';
+        var data = SEZoo.itemData;
+        var viewMode = 'particles';
+        var sim, anim;
+        var lastChartAnimFrame = null;
+        SEZoo.tabs.init({ themeKey: 'sezoo_theme' });
+
+        var robot = SEZoo.anim.createRobotSvg('#robot-container', {
+            viewBox: '-150 -30 300 280'
+        });
+
+        function initDiag(yDom, yLab, xLab, xDom) {
+            SEZoo.diagram.destroy();
+            SEZoo.diagram.init('#diagram-container', {
+                width: 800, height: 380,
+                xDomain: xDom || [0, data.params.duration],
+                yDomain: yDom,
+                xLabel: xLab || 'Time (s)', yLabel: yLab
+            });
+        }
+
+        function renderChart() {
+            if (lastChartAnimFrame) { cancelAnimationFrame(lastChartAnimFrame); lastChartAnimFrame = null; }
+
+            if (viewMode === 'particles') {
+                initDiag([-6, 6], 'Angular velocity (rad/s)', 'Angle (rad)', [-2, 2]);
+                /* Draw final particle snapshot as static scatter */
+                if (sim.currentParticles && sim.currentParticles.length) {
+                    SEZoo.diagram.drawParticles(sim.currentParticles, {
+                        color: '#58a6ff', className: 'se-pf-particle',
+                        radiusFn: function (d) { return 2 + d.w * data.params.N_particles * 4; }
+                    });
+                    var scales = SEZoo.diagram.getScales();
+                    var grp = SEZoo.diagram.getGroup();
+                    var lastSnap = sim.particleSnapshots[sim.particleSnapshots.length - 1];
+                    if (lastSnap) {
+                        grp.append('circle').attr('cx', scales.x(lastSnap.trueState.x)).attr('cy', scales.y(lastSnap.trueState.y)).attr('r', 7).attr('fill', 'none').attr('stroke', '#3fb950').attr('stroke-width', 2.5);
+                        grp.append('rect').attr('x', scales.x(lastSnap.estimate.x) - 5).attr('y', scales.y(lastSnap.estimate.y) - 5).attr('width', 10).attr('height', 10).attr('fill', 'none').attr('stroke', '#f0c808').attr('stroke-width', 2);
+                    }
+                }
+            } else if (viewMode === 'traces') {
+                initDiag([-3, 3], 'Angle (rad)');
+                SEZoo.diagram.drawTimeSeries(sim.trueTheta, { color: '#3fb950', width: 2, className: 'se-true-theta' });
+                SEZoo.diagram.drawTimeSeries(sim.estTheta, { color: '#58a6ff', width: 2, className: 'se-est-theta', animate: false });
+                SEZoo.diagram.drawTimeSeries(sim.trueOmega, { color: '#56d364', width: 1.5, className: 'se-true-omega', animate: false });
+                SEZoo.diagram.drawTimeSeries(sim.estOmega, { color: '#bc8cff', width: 1.5, className: 'se-est-omega', animate: false });
+            } else {
+                initDiag([0, data.params.N_particles * 1.1], 'N_eff');
+                SEZoo.diagram.drawTimeSeries(sim.neffHistory, { color: '#f0c808', width: 2, className: 'se-neff' });
+                var scales2 = SEZoo.diagram.getScales();
+                var grp2 = SEZoo.diagram.getGroup();
+                var margin2 = SEZoo.diagram.getMargin();
+                var dims2 = SEZoo.diagram.getDims();
+                var yThresh = scales2.y(data.params.N_particles / 2);
+                grp2.append('line').attr('x1', margin2.left).attr('x2', dims2.width - margin2.right).attr('y1', yThresh).attr('y2', yThresh).attr('stroke', '#f85149').attr('stroke-width', 1.5).attr('stroke-dasharray', '6,4').attr('opacity', 0.7);
+                grp2.append('text').attr('x', dims2.width - margin2.right - 5).attr('y', yThresh - 6).attr('fill', '#f85149').attr('font-size', '11px').attr('text-anchor', 'end').text('N/2 resample threshold');
+            }
+            document.getElementById('diagram-stats').textContent =
+                'Final error: ' + sim.stats.finalError +
+                '  |  N_eff: ' + sim.stats.finalNeff + '/' + sim.stats.nParticles +
+                '  |  N = ' + data.params.N_particles +
+                '  Q = ' + data.params.Q_scale.toFixed(3) +
+                '  R = ' + data.params.R_scale.toFixed(2) +
+                '  mu = ' + data.params.friction_coeff.toFixed(2);
+        }
+
+        function renderRobotFrame(frame) {
+            if (!sim || !robot) return;
+            robot.g.selectAll('*').remove();
+
+            var trueAngle = sim.trueTheta[frame].v;
+            var estAngle = sim.estTheta[frame].v;
+
+            /* True pendulum (green) */
+            SEZoo.anim.drawPendulum(robot.g, trueAngle, 140, {
+                color: SEZoo.anim.SE_COLORS.true_state
+            });
+
+            /* Estimated pendulum (blue ghost) */
+            SEZoo.anim.drawPendulum(robot.g, estAngle, 140, {
+                color: SEZoo.anim.SE_COLORS.estimate, opacity: 0.4
+            });
+
+            /* Find closest particle snapshot */
+            var closestSnap = null;
+            var minDist = Infinity;
+            for (var si = 0; si < sim.particleSnapshots.length; si++) {
+                var d = Math.abs(sim.particleSnapshots[si].step - frame);
+                if (d < minDist) { minDist = d; closestSnap = sim.particleSnapshots[si]; }
+            }
+
+            /* Draw particle cloud */
+            if (closestSnap && closestSnap.particles) {
+                SEZoo.anim.drawParticleCloud(robot.g, 0, 0, closestSnap.particles,
+                    function (theta) {
+                        return { x: 140 * Math.sin(theta), y: 140 * Math.cos(theta) };
+                    },
+                    { color: '#f0c808' }
+                );
+            }
+
+            /* Angle label */
+            SEZoo.anim.drawAngleLabel(robot.g, 0, 0, trueAngle, {
+                color: SEZoo.anim.SE_COLORS.true_state, radius: 35
+            });
+
+            /* Time cursor */
+            var t = sim.trueTheta[frame].t;
+            var scales = SEZoo.diagram.getScales();
+            var dims = SEZoo.diagram.getDims();
+            var margin = SEZoo.diagram.getMargin();
+            SEZoo.anim.drawTimeCursor(SEZoo.diagram.getSvg(), scales.x, t, dims.height, margin);
+        }
+
+        function regenerate() {
+            sim = data.generate();
+            renderChart();
+            if (anim) anim.reset(sim.trueTheta.length);
+        }
+
+        sim = data.generate();
+        renderChart();
+
+        anim = new SEZoo.anim.AnimController({
+            totalFrames: sim.trueTheta.length,
+            fps: 30,
+            playBtn: document.getElementById('btn-play'),
+            scrubber: document.getElementById('scrubber'),
+            frameDisplay: document.getElementById('frame-display'),
+            speedSelect: document.getElementById('speed-select'),
+            stepBackBtn: document.getElementById('btn-step-back'),
+            stepFwdBtn: document.getElementById('btn-step-fwd'),
+            onFrame: renderRobotFrame
+        });
+
+        /* View mode buttons */
+        var viewMap = { particles: 'btn-particles', traces: 'btn-traces', neff: 'btn-neff' };
+        Object.keys(viewMap).forEach(function (m) {
+            document.getElementById(viewMap[m]).addEventListener('click', function () {
+                viewMode = m;
+                document.querySelectorAll('.item-diagram__controls .item-diagram__btn').forEach(function (b) {
+                    if (b.id !== 'btn-regenerate') b.classList.remove('item-diagram__btn--active');
+                });
+                this.classList.add('item-diagram__btn--active');
+                renderChart();
+            });
+        });
+        document.getElementById('btn-regenerate').addEventListener('click', regenerate);
+
+        /* Sliders */
+        document.querySelector('#slider-Np .item-slider__input').addEventListener('input', function () {
+            data.params.N_particles = parseInt(this.value, 10);
+            document.querySelector('#slider-Np .item-slider__value').textContent = data.params.N_particles;
+            regenerate();
+        });
+        document.querySelector('#slider-Q .item-slider__input').addEventListener('input', function () {
+            data.params.Q_scale = parseFloat(this.value);
+            document.querySelector('#slider-Q .item-slider__value').textContent = data.params.Q_scale.toFixed(3);
+            regenerate();
+        });
+        document.querySelector('#slider-R .item-slider__input').addEventListener('input', function () {
+            data.params.R_scale = parseFloat(this.value);
+            document.querySelector('#slider-R .item-slider__value').textContent = data.params.R_scale.toFixed(2);
+            regenerate();
+        });
+        document.querySelector('#slider-mu .item-slider__input').addEventListener('input', function () {
+            data.params.friction_coeff = parseFloat(this.value);
+            document.querySelector('#slider-mu .item-slider__value').textContent = data.params.friction_coeff.toFixed(2);
+            regenerate();
+        });
+    })();
+    </script>
+</body>
+</html>
